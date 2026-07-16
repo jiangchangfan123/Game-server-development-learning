@@ -24,11 +24,13 @@ func wwwGolandLtd(w http.ResponseWriter, r *http.Request) {
 	data := r.URL.Query().Get("data")
 	fmt.Println("data:", data)
 
-	//建立玩家结构
-	/* PlayerST := &da{
-		conn: conn,
-		mapsafe: nil,
-	} */
+	//网络信息
+	NetDataConntmp := &NetDataConn{
+		Connection: conn,
+		StrMd5:     "",
+	}
+
+	NetDataConntmp.PullFromClient()
 
 	//处理结构信息
 }
