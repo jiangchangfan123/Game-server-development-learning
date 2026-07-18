@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/websocket"
 )
@@ -33,4 +34,21 @@ func wwwGolandLtd(w http.ResponseWriter, r *http.Request) {
 	NetDataConntmp.PullFromClient()
 
 	//处理结构信息
+}
+
+// 首页 - 显示 HTML 登录页面
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile("../前端/homepage.html")
+	if err != nil {
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(data)
+}
+
+// GitHub 回调
+func githubCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	fmt.Fprintf(w, "授权成功,code: %s", code)
 }

@@ -17,8 +17,10 @@ func main() {
 	//设置同时执行 Go 代码的最大 OS 线程数为 n。
 	runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 
-	http.HandleFunc("/", wwwGolandLtd)
-	err := http.ListenAndServe(":8888", nil)
+	http.HandleFunc("/ws", wwwGolandLtd)
+	http.HandleFunc("/api/github/callback", githubCallback)
+	http.HandleFunc("/", indexHandler)
+	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		fmt.Println("网络错误", err)
 		return

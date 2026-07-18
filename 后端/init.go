@@ -8,5 +8,4 @@ func init() {
 
 func Go_func() {
 	fmt.Println("我爱玩绝区零")
-	return
 }
