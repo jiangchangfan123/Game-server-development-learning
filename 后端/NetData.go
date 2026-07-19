@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 
 	"start/auth"
@@ -28,9 +27,9 @@ func (this *NetDataConn) PullFromClient() {
 		msgType, data, err := this.Connection.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				fmt.Println("客户端正常关闭连接")
+				slog.Info("客户端正常关闭连接")
 			} else {
-				fmt.Println("读取消息失败：", err)
+				slog.Error("读取消息失败", "error", err)
 			}
 			break
 		}
@@ -43,14 +42,12 @@ func (this *NetDataConn) PullFromClient() {
 		if len(content) == 0 {
 			break
 		}
-		fmt.Println("收到客户端消息：", content)
+		slog.Info("收到客户端消息", "content", content)
 		go this.SyncMessageFun(content)
 	}
 }
 
 func (this *NetDataConn) SyncMessageFun(content string) {
-	fmt.Println(content)
-
 	var r RequestBody
 	r.req = content
 

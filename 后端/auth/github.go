@@ -33,6 +33,7 @@ func LoginWithCode(code string) (*GitHubUser, error) {
 	return fetchUser(token)
 }
 
+// 通过授权通过后的code来获取github用户的access token
 func exchangeCode(code string) (string, error) {
 	cfg := config.GitHub
 	data := url.Values{

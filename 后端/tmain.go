@@ -46,16 +46,16 @@ var upgrade = websocket.Upgrader{
 }
 
 func wwwGolandLtd(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("绝区零社区欢迎你 !")
+	slog.Info("WebSocket连接请求", "remote", r.RemoteAddr)
 
 	conn, err := upgrade.Upgrade(w, r, nil)
 	if err != nil {
+		slog.Error("WebSocket升级失败", "error", err)
 		return
 	}
 	defer conn.Close()
 
-	data := r.URL.Query().Get("data")
-	fmt.Println("data:", data)
+	slog.Info("WebSocket连接成功", "remote", r.RemoteAddr)
 
 	NetDataConntmp := &NetDataConn{
 		Connection: conn,
@@ -118,6 +118,8 @@ func githubCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "保存用户信息失败", http.StatusInternalServerError)
 		return
 	}
+
+	slog.Info("githubCallback", "msg", "登录成功", "uid", player.UID, "name", player.PlayerName, "openID", player.OpenID)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html>

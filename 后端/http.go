@@ -1,17 +1,21 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"runtime"
 
 	"start/config"
 	"start/db"
+	"start/logger"
 )
 
 func main() {
+	if err := logger.Init(); err != nil {
+		log.Fatal(err)
+	}
 	if err := config.Load(); err != nil {
 		log.Fatal(err)
 	}
@@ -20,19 +24,19 @@ func main() {
 	}
 	defer db.Close()
 
-	fmt.Println("本机几核:", runtime.NumCPU())
+	slog.Info("服务器启动", "cpuNum", runtime.NumCPU())
 	runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 
 	http.HandleFunc("/ws", wwwGolandLtd)
 	http.HandleFunc("/api/github/callback", githubCallback)
 	http.HandleFunc("/", indexHandler)
 
-	fmt.Println("服务器启动: http://localhost:8080")
-	fmt.Printf("数据库: %s:%s/%s\n", config.DB.Host, config.DB.Port, config.DB.Name)
+	slog.Info("HTTP服务监听", "addr", ":8080")
+	slog.Info("数据库", "host", config.DB.Host, "port", config.DB.Port, "name", config.DB.Name)
 	if proxy := os.Getenv("HTTP_PROXY"); proxy != "" {
-		fmt.Printf("HTTP 代理: %s\n", proxy)
+		slog.Info("HTTP代理", "proxy", proxy)
 	}
 	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("网络错误", err)
+		slog.Error("网络错误", "error", err)
 	}
 }
