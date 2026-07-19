@@ -13,7 +13,7 @@ const (
 type PlayerST struct {
 	UID        int
 	PlayerName string
-	OpenID     string //唯一微信ID
+	OpenID     string // GitHub 用户唯一 ID
 }
 
 type Head_Proto struct {
@@ -23,7 +23,7 @@ type Head_Proto struct {
 
 type CS2_PlayerLogin struct {
 	Head_Proto
-	Code string //微信授权code
+	Code string //github授权code
 }
 
 type SC2_PlayerLogin struct {

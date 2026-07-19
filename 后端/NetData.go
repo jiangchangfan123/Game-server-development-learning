@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-
 	"log/slog"
+
+	"start/auth"
+	"start/db"
 	Proto "start/Protocol"
 	Proto2 "start/Protocol/Protocol2"
 
@@ -23,10 +25,8 @@ type RequestBody struct {
 func (this *NetDataConn) PullFromClient() {
 
 	for {
-		// 核心修改：替换原来的 Receive 读取逻辑
 		msgType, data, err := this.Connection.ReadMessage()
 		if err != nil {
-			// 可选：区分正常关闭和异常断开，打印日志
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				fmt.Println("客户端正常关闭连接")
 			} else {
@@ -35,7 +35,6 @@ func (this *NetDataConn) PullFromClient() {
 			break
 		}
 
-		// 只处理文本消息，过滤二进制、ping/pong帧
 		if msgType != websocket.TextMessage {
 			continue
 		}
@@ -49,7 +48,6 @@ func (this *NetDataConn) PullFromClient() {
 	}
 }
 
-// 处理消息
 func (this *NetDataConn) SyncMessageFun(content string) {
 	fmt.Println(content)
 
@@ -61,52 +59,73 @@ func (this *NetDataConn) SyncMessageFun(content string) {
 	} else {
 		this.HandleCltProtocol(ProtoData["Protocol"], ProtoData["Protocol2"], ProtoData)
 	}
-	//实现格式的处理函数：主协议、子协议、struct
-
 }
 
 func (this *NetDataConn) HandleCltProtocol(Protocol interface{}, Protocol2 interface{}, ProtoData map[string]interface{}) {
-	//分发处理	首先判断主协议存在，再判断子协议存在
-	switch Protocol {
-	case Proto.GameData_Proto:
-		{
-			//子协议处理
-			this.HandleCltProtocol2(Protocol2, ProtoData)
-		}
-	case Proto.GameData_DB_Proto:
-		{
-
-		}
-	default:
-		panic("主协议不存在!!!")
+	proto, ok := toInt(Protocol)
+	if !ok {
+		slog.Error("HandleCltProtocol", "error", "invalid Protocol")
+		return
 	}
 
+	switch proto {
+	case Proto.GameData_Proto:
+		this.HandleCltProtocol2(ProtoData["Protocol2"], ProtoData)
+	case Proto.GameData_DB_Proto:
+		// DB 协议预留
+	default:
+		slog.Error("HandleCltProtocol", "error", "主协议不存在", "Protocol", proto)
+	}
 }
 
 func (this *NetDataConn) HandleCltProtocol2(Protocol2 interface{}, ProtoData map[string]interface{}) {
-	//处理子协议
-	switch Protocol2 {
-	case Proto2.CS2_PlayerLoginProto2:
-		{
-			//功能函数处理 -- 用户登录协议
-			this.PlayerLogin(ProtoData)
-		}
-	default:
-		panic("子协议不存在!!!")
+	proto2, ok := toInt(Protocol2)
+	if !ok {
+		slog.Error("HandleCltProtocol2", "error", "invalid Protocol2")
+		return
 	}
 
+	switch proto2 {
+	case Proto2.CS2_PlayerLoginProto2:
+		this.PlayerLogin(ProtoData)
+	default:
+		slog.Error("HandleCltProtocol2", "error", "子协议不存在", "Protocol2", proto2)
+	}
 }
 
-// 用户登录的协议
+// 用户登录：客户端通过 WebSocket 发送 GitHub code，服务器认证并入库
 func (this *NetDataConn) PlayerLogin(ProtoData map[string]interface{}) {
-	//服务器的逻辑处理
-	//获取我们从client传过来的code
-	//通过微信提供的接口-- 获取微信玩家的个人信息
-	//将用户数据信息存到我们的数据库里(异步处理)
-	//返回给客户端数据
+	code, _ := ProtoData["Code"].(string)
+	if code == "" {
+		slog.Error("PlayerLogin", "error", "missing Code")
+		return
+	}
+
+	githubUser, err := auth.LoginWithCode(code)
+	if err != nil {
+		slog.Error("PlayerLogin", "error", err)
+		return
+	}
+
+	player, err := db.SaveGitHubUser(githubUser)
+	if err != nil {
+		slog.Error("PlayerLogin", "error", err)
+		return
+	}
+
+	resp := map[string]interface{}{
+		"Protocol":   Proto.GameData_Proto,
+		"Protocol2":  Proto2.SC2_PlayerLoginProto2,
+		"PlayerData": player,
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		slog.Error("PlayerLogin", "error", err)
+		return
+	}
+	this.Connection.WriteMessage(websocket.TextMessage, data)
 }
 
-// 将json字符串转换为map
 func (r *RequestBody) Json2Map() (s map[string]interface{}, err error) {
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(r.req), &result); err != nil {
@@ -114,4 +133,17 @@ func (r *RequestBody) Json2Map() (s map[string]interface{}, err error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func toInt(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	default:
+		return 0, false
+	}
 }
