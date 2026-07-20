@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
-	"start/auth"
-	"start/db"
 	Proto "start/Protocol"
 	Proto2 "start/Protocol/Protocol2"
+	"start/auth"
+	"start/db"
 
 	"github.com/gorilla/websocket"
 )
@@ -27,9 +28,9 @@ func (this *NetDataConn) PullFromClient() {
 		msgType, data, err := this.Connection.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				slog.Info("客户端正常关闭连接")
+				fmt.Println("客户端正常关闭连接")
 			} else {
-				slog.Error("读取消息失败", "error", err)
+				fmt.Println("读取消息失败：", err)
 			}
 			break
 		}
@@ -42,12 +43,14 @@ func (this *NetDataConn) PullFromClient() {
 		if len(content) == 0 {
 			break
 		}
-		slog.Info("收到客户端消息", "content", content)
+		fmt.Println("收到客户端消息：", content)
 		go this.SyncMessageFun(content)
 	}
 }
 
 func (this *NetDataConn) SyncMessageFun(content string) {
+	fmt.Println(content)
+
 	var r RequestBody
 	r.req = content
 
@@ -110,6 +113,12 @@ func (this *NetDataConn) PlayerLogin(ProtoData map[string]interface{}) {
 		return
 	}
 
+	this.PlayerSendServerMessage(player)
+
+}
+
+// 发送给客户端的数据信息函数
+func (this *NetDataConn) PlayerSendServerMessage(player *Proto2.PlayerST) {
 	resp := map[string]interface{}{
 		"Protocol":   Proto.GameData_Proto,
 		"Protocol2":  Proto2.SC2_PlayerLoginProto2,
