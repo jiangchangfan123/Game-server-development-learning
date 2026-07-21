@@ -8,6 +8,10 @@ const (
 	//选择房间协议
 	CS2_ChooseRoomProto2
 	SC2_ChooseRoomProto2
+
+	// WebSocket 绑定已登录玩家（HTTP OAuth 成功后使用）
+	CS2_PlayerBindProto2
+	SC2_PlayerBindProto2
 )
 
 type PlayerST struct {

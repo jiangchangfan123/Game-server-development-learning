@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"start/auth"
 	"start/config"
 	"start/db"
+	Proto2 "start/Protocol/Protocol2"
 
 	"github.com/gorilla/websocket"
 )
@@ -30,14 +32,19 @@ func validateOAuthState(state string, r *http.Request) bool {
 		return false
 	}
 
+	// 优先校验 cookie（服务器重启后仍有效）
+	if cookie, err := r.Cookie("oauth_state"); err == nil && cookie.Value == state {
+		oauthStates.Delete(state)
+		return true
+	}
+
 	if v, ok := oauthStates.LoadAndDelete(state); ok {
 		if time.Since(v.(time.Time)) <= oauthStateTTL {
 			return true
 		}
 	}
 
-	cookie, err := r.Cookie("oauth_state")
-	return err == nil && cookie.Value == state
+	return false
 }
 
 // 创建一个 Upgrader 实例，用于将 HTTP 连接升级为 WebSocket
@@ -85,6 +92,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	authURL := config.GitHub.AuthCodeURL(state)
+	slog.Info("indexHandler", "msg", "生成登录链接", "state", state)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	tmpl.Execute(w, map[string]string{"AuthURL": authURL})
 }
@@ -92,15 +100,17 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 // GitHub 回调：换取 token → 拉取用户信息 → 写入数据库
 func githubCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+	slog.Info("githubCallback", "msg", "收到回调", "hasCode", code != "", "state", state)
+
 	if code == "" {
 		http.Error(w, "缺少授权 code", http.StatusBadRequest)
 		return
 	}
 
-	state := r.URL.Query().Get("state")
 	if !validateOAuthState(state, r) {
 		slog.Error("githubCallback", "error", "state mismatch", "state", state)
-		http.Error(w, "state 校验失败，请从首页重新点击 GitHub 登录", http.StatusBadRequest)
+		http.Error(w, "state 校验失败，请从首页重新点击 GitHub 登录（不要用旧标签页）", http.StatusBadRequest)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "oauth_state", Value: "", Path: "/", MaxAge: -1})
@@ -121,6 +131,7 @@ func githubCallback(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("githubCallback", "msg", "登录成功", "uid", player.UID, "name", player.PlayerName, "openID", player.OpenID)
 
+	playerJSON, _ := json.Marshal(player)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>登录成功</title></head>
@@ -129,8 +140,32 @@ func githubCallback(w http.ResponseWriter, r *http.Request) {
 <p>UID: %d</p>
 <p>用户名: %s</p>
 <p>GitHub ID: %s</p>
+<p id="ws-status">WebSocket 连接中...</p>
 <p><a href="/">返回首页</a></p>
-</body></html>`, player.UID, player.PlayerName, player.OpenID)
+<script>
+const player = %s;
+const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    Protocol: 1,
+    Protocol2: %d,
+    OpenID: String(player.OpenID),
+    UID: player.UID
+  }));
+  document.getElementById('ws-status').textContent = 'WebSocket 已连接，正在绑定玩家...';
+};
+ws.onmessage = (e) => {
+  document.getElementById('ws-status').textContent = '绑定成功，收到消息: ' + e.data;
+  console.log('收到:', e.data);
+};
+ws.onerror = () => {
+  document.getElementById('ws-status').textContent = 'WebSocket 连接失败，请确认服务器在运行';
+};
+ws.onclose = () => {
+  document.getElementById('ws-status').textContent = 'WebSocket 已断开（关闭此页面会导致 online=0）';
+};
+</script>
+</body></html>`, player.UID, player.PlayerName, player.OpenID, playerJSON, Proto2.CS2_PlayerBindProto2)
 }
 
 func randomState() string {

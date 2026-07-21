@@ -76,3 +76,20 @@ func SaveGitHubUser(user *auth.GitHubUser) (*Proto2.PlayerST, error) {
 		OpenID:     openID,
 	}, nil
 }
+
+func GetPlayerByOpenID(openID string) (*Proto2.PlayerST, error) {
+	var uid int
+	var username string
+	err := conn.QueryRow(
+		"SELECT id, username FROM users WHERE github_id = ?",
+		openID,
+	).Scan(&uid, &username)
+	if err != nil {
+		return nil, err
+	}
+	return &Proto2.PlayerST{
+		UID:        uid,
+		PlayerName: username,
+		OpenID:     openID,
+	}, nil
+}

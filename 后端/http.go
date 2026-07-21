@@ -27,6 +27,8 @@ func main() {
 	slog.Info("服务器启动", "cpuNum", runtime.NumCPU())
 	runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 
+	go G_timer()
+
 	http.HandleFunc("/ws", wwwGolandLtd)
 	http.HandleFunc("/api/github/callback", githubCallback)
 	http.HandleFunc("/", indexHandler)
