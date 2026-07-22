@@ -9,10 +9,36 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
+//精灵图
+type Sprite struct {
+	Img   *ebiten.Image
+	X     float64
+	Y     float64
+	Speed float64
+}
+
+//玩家
+type Player struct {
+	*Sprite
+	HP int
+}
+
+//敌人
+type Enemy struct {
+	*Sprite
+	FollowPlayer bool
+}
+
+//药水
+type Potion struct{
+	*Sprite
+	AmtHeal uint
+}
+
 type Game struct {
-	PlayerImage *ebiten.Image
-	X           float64
-	Y           float64
+	player  *Player
+	sprites *[]Enemy //敌人群
+	potion  *Potion
 }
 
 /**
@@ -23,19 +49,41 @@ type Game struct {
 func (g *Game) Update() error {
 
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		g.X += 2
+		g.player.X += g.player.Speed
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		g.X -= 2
+		g.player.X -= g.player.Speed
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		g.Y += 2
+		g.player.Y += g.player.Speed
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		g.Y -= 2
+		g.player.Y -= g.player.Speed
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
+		g.player.Speed = 3
+	} else {
+		g.player.Speed = 2
+	}
+
+	for _, spirte := range *g.sprites {
+		if spirte.FollowPlayer {
+			if spirte.X < g.player.X {
+				spirte.X = spirte.X + spirte.Speed
+			} else {
+				spirte.X = spirte.X - spirte.Speed
+			}
+
+			if spirte.Y < g.player.Y {
+				spirte.Y = spirte.Y + spirte.Speed
+			} else {
+				spirte.Y = spirte.Y - spirte.Speed
+			}
+		}
 	}
 
 	return nil
@@ -47,15 +95,39 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	// ebitenutil.DebugPrint(screen, "Hello, World!") //窗口上添加文字
 
-	opts := ebiten.DrawImageOptions{}
-	opts.GeoM.Translate(g.X, g.Y)
-
+	// 绘制玩家
+	playerOpts := ebiten.DrawImageOptions{}
+	playerOpts.GeoM.Translate(g.player.X, g.player.Y)
 	screen.DrawImage(
-		g.PlayerImage.SubImage(
-			image.Rect(0, 0, 16, 16), //截取16x16图像左上角的像素图（子图像）
+		g.player.Img.SubImage(
+			image.Rect(0, 0, 16, 16),
 		).(*ebiten.Image),
-		&opts,
+		&playerOpts,
 	)
+
+	// 绘制药水
+	if g.potion != nil {
+		potionOpts := ebiten.DrawImageOptions{}
+		potionOpts.GeoM.Translate(g.potion.X, g.potion.Y)
+		screen.DrawImage(
+			g.potion.Img.SubImage(
+				image.Rect(0, 0, 16, 16),
+			).(*ebiten.Image),
+			&potionOpts,
+		)
+	}
+
+	// 绘制其他精灵（静态装饰/NPC 等）
+	for _, sprite := range *g.sprites {
+		opts := ebiten.DrawImageOptions{}
+		opts.GeoM.Translate(sprite.X, sprite.Y)
+		screen.DrawImage(
+			sprite.Img.SubImage(
+				image.Rect(0, 0, 16, 16),
+			).(*ebiten.Image),
+			&opts,
+		)
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
@@ -72,7 +144,67 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := ebiten.RunGame(&Game{PlayerImage: playerImg, X: 150, Y: 150}); err != nil {
+	skeletonImg, _, err := ebitenutil.NewImageFromFile("assets/images/skeleton.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	potionImg, _, err := ebitenutil.NewImageFromFile("assets/images/potion.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := ebiten.RunGame(&Game{
+		player: &Player{
+			Sprite: &Sprite{
+				Img:   playerImg,
+				X:     150,
+				Y:     150,
+				Speed: 2,
+			},
+			HP: 3,
+		},
+		potion: &Potion{
+			Sprite: &Sprite{
+				Img:   potionImg,
+				X:     300,
+				Y:     200,
+				Speed: 0,
+			},
+			AmtHeal: 1,
+		},
+		sprites: &[]Enemy{
+			{
+				&Sprite{
+					Img:   skeletonImg,
+					X:     50,
+					Y:     50,
+					Speed: 1,
+				},
+				true,
+			},
+
+			{
+				&Sprite{
+					Img:   skeletonImg,
+					X:     100,
+					Y:     100,
+					Speed: 1,
+				},
+				true,
+			},
+
+			{
+				&Sprite{
+					Img:   skeletonImg,
+					X:     200,
+					Y:     200,
+					Speed: 1,
+				},
+				false,
+			},
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }
