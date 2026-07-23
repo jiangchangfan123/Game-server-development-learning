@@ -1,0 +1,39 @@
+{
+    "activeFile": "spawn.tmj",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "spawn.tmj": {
+            "scale": 1,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 245,
+                "y": 198
+            }
+        },
+        "tliedsets/TilesetFloor.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1.5
+        }
+    },
+    "last.imagePath": "C:/Users/jcf/Downloads",
+    "map.height": 80,
+    "map.lastUsedFormat": "json",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "map.width": 100,
+    "openFiles": [
+        "spawn.tmj",
+        "tliedsets/TilesetFloor.tsx"
+    ],
+    "project": "未命名.tiled-project",
+    "recentFiles": [
+        "tliedsets/TilesetFloor.tsx",
+        "spawn.tmj"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 16,
+        "width": 16
+    }
+}

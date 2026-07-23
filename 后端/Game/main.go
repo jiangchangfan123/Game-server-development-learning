@@ -9,7 +9,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
-//精灵图
+// 精灵图
 type Sprite struct {
 	Img   *ebiten.Image
 	X     float64
@@ -17,28 +17,30 @@ type Sprite struct {
 	Speed float64
 }
 
-//玩家
+// 玩家
 type Player struct {
 	*Sprite
 	HP int
 }
 
-//敌人
+// 敌人
 type Enemy struct {
 	*Sprite
 	FollowPlayer bool
 }
 
-//药水
-type Potion struct{
+// 药水
+type Potion struct {
 	*Sprite
 	AmtHeal uint
 }
 
 type Game struct {
-	player  *Player
-	sprites *[]Enemy //敌人群
-	potion  *Potion
+	player      *Player
+	sprites     *[]Enemy //敌人群
+	potion      *Potion
+	tileMapJson *TileMapJson
+	tileMapImg  *ebiten.Image
 }
 
 /**
@@ -94,6 +96,34 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{120, 180, 255, 255}) //将屏幕设置成浅蓝色
 
 	// ebitenutil.DebugPrint(screen, "Hello, World!") //窗口上添加文字
+
+	//绘制地图
+
+	mapOpts := ebiten.DrawImageOptions{}
+	for _, layer := range g.tileMapJson.Layer {
+		for index, id := range layer.Data {
+			x := index % layer.Width
+			y := index / layer.Width
+
+			x *= 16
+			y *= 16
+
+			srcX := (id - 1) % 22
+			srcY := (id - 1) / 22
+
+			srcX *= 16
+			srcY *= 16
+
+			mapOpts.GeoM.Translate(float64(x), float64(y))
+
+			screen.DrawImage(
+				g.tileMapImg.SubImage(image.Rect(srcX, srcY, srcX+16, srcY+16)).(*ebiten.Image),
+				&mapOpts,
+			)
+
+			mapOpts.GeoM.Reset()
+		}
+	}
 
 	// 绘制玩家
 	playerOpts := ebiten.DrawImageOptions{}
@@ -154,6 +184,13 @@ func main() {
 		log.Fatal(err)
 	}
 
+	tilemapImg, _, err := ebitenutil.NewImageFromFile("assets/images/TilesetFloor.png")
+
+	tilemapJson, err := NewTileMapJSON("assets/maps/spawn.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if err := ebiten.RunGame(&Game{
 		player: &Player{
 			Sprite: &Sprite{
@@ -173,6 +210,8 @@ func main() {
 			},
 			AmtHeal: 1,
 		},
+		tileMapJson: tilemapJson,
+		tileMapImg:  tilemapImg,
 		sprites: &[]Enemy{
 			{
 				&Sprite{
