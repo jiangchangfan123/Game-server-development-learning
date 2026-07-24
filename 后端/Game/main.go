@@ -4,43 +4,19 @@ import (
 	"image"
 	"image/color"
 	"log"
+	"start/Game/entities"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
-// 精灵图
-type Sprite struct {
-	Img   *ebiten.Image
-	X     float64
-	Y     float64
-	Speed float64
-}
-
-// 玩家
-type Player struct {
-	*Sprite
-	HP int
-}
-
-// 敌人
-type Enemy struct {
-	*Sprite
-	FollowPlayer bool
-}
-
-// 药水
-type Potion struct {
-	*Sprite
-	AmtHeal uint
-}
-
 type Game struct {
-	player      *Player
-	sprites     *[]Enemy //敌人群
-	potion      *Potion
+	player      *entities.Player
+	enemies     *[]entities.Enemy //敌人群
+	potion      *entities.Potion
 	tileMapJson *TileMapJson
 	tileMapImg  *ebiten.Image
+	cam         *Camera
 }
 
 /**
@@ -72,7 +48,7 @@ func (g *Game) Update() error {
 		g.player.Speed = 2
 	}
 
-	for _, spirte := range *g.sprites {
+	for _, spirte := range *g.enemies {
 		if spirte.FollowPlayer {
 			if spirte.X < g.player.X {
 				spirte.X = spirte.X + spirte.Speed
@@ -87,6 +63,14 @@ func (g *Game) Update() error {
 			}
 		}
 	}
+
+	g.cam.FollowTarget(g.player.X+8, g.player.Y+8, 640, 480)
+	g.cam.Constrain(
+		float64(g.tileMapJson.Layer[0].Width)*16.0,
+		float64(g.tileMapJson.Layer[0].Height)*16.0,
+		640,
+		480,
+	)
 
 	return nil
 }
@@ -114,7 +98,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			srcX *= 16
 			srcY *= 16
 
-			mapOpts.GeoM.Translate(float64(x), float64(y))
+			mapOpts.GeoM.Translate(float64(x)+g.cam.X, float64(y)+g.cam.Y)
 
 			screen.DrawImage(
 				g.tileMapImg.SubImage(image.Rect(srcX, srcY, srcX+16, srcY+16)).(*ebiten.Image),
@@ -127,7 +111,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	// 绘制玩家
 	playerOpts := ebiten.DrawImageOptions{}
-	playerOpts.GeoM.Translate(g.player.X, g.player.Y)
+	playerOpts.GeoM.Translate(g.player.X+g.cam.X, g.player.Y+g.cam.Y)
 	screen.DrawImage(
 		g.player.Img.SubImage(
 			image.Rect(0, 0, 16, 16),
@@ -138,7 +122,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// 绘制药水
 	if g.potion != nil {
 		potionOpts := ebiten.DrawImageOptions{}
-		potionOpts.GeoM.Translate(g.potion.X, g.potion.Y)
+		potionOpts.GeoM.Translate(g.potion.X+g.cam.X, g.potion.Y+g.cam.Y)
 		screen.DrawImage(
 			g.potion.Img.SubImage(
 				image.Rect(0, 0, 16, 16),
@@ -148,9 +132,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	// 绘制其他精灵（静态装饰/NPC 等）
-	for _, sprite := range *g.sprites {
+	for _, sprite := range *g.enemies {
 		opts := ebiten.DrawImageOptions{}
-		opts.GeoM.Translate(sprite.X, sprite.Y)
+		opts.GeoM.Translate(sprite.X+g.cam.X, sprite.Y+g.cam.Y)
 		screen.DrawImage(
 			sprite.Img.SubImage(
 				image.Rect(0, 0, 16, 16),
@@ -192,8 +176,8 @@ func main() {
 	}
 
 	if err := ebiten.RunGame(&Game{
-		player: &Player{
-			Sprite: &Sprite{
+		player: &entities.Player{
+			Sprite: &entities.Sprite{
 				Img:   playerImg,
 				X:     150,
 				Y:     150,
@@ -201,8 +185,8 @@ func main() {
 			},
 			HP: 3,
 		},
-		potion: &Potion{
-			Sprite: &Sprite{
+		potion: &entities.Potion{
+			Sprite: &entities.Sprite{
 				Img:   potionImg,
 				X:     300,
 				Y:     200,
@@ -212,37 +196,38 @@ func main() {
 		},
 		tileMapJson: tilemapJson,
 		tileMapImg:  tilemapImg,
-		sprites: &[]Enemy{
+		enemies: &[]entities.Enemy{
 			{
-				&Sprite{
+				Sprite: &entities.Sprite{
 					Img:   skeletonImg,
 					X:     50,
 					Y:     50,
 					Speed: 1,
 				},
-				true,
+				FollowPlayer: true,
 			},
 
 			{
-				&Sprite{
+				Sprite: &entities.Sprite{
 					Img:   skeletonImg,
 					X:     100,
 					Y:     100,
 					Speed: 1,
 				},
-				true,
+				FollowPlayer: true,
 			},
 
 			{
-				&Sprite{
+				Sprite: &entities.Sprite{
 					Img:   skeletonImg,
 					X:     200,
 					Y:     200,
 					Speed: 1,
 				},
-				false,
+				FollowPlayer: false,
 			},
 		},
+		cam: NewCamera(0, 0),
 	}); err != nil {
 		log.Fatal(err)
 	}
