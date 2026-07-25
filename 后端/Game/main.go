@@ -1,234 +1,299 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"log"
-	"start/Game/entities"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+
+	"start/Game/entities"
 )
 
 type Game struct {
 	player      *entities.Player
-	enemies     *[]entities.Enemy //敌人群
-	potion      *entities.Potion
-	tileMapJson *TileMapJson
-	tileMapImg  *ebiten.Image
+	enemies     []*entities.Enemy
+	potions     []*entities.Potion
+	tilemapJSON *TileMapJson
+	tilesets    []Tileset
+	tilemapImg  *ebiten.Image
 	cam         *Camera
+	colliders   []image.Rectangle
 }
 
-/**
-只要实现了Update()、Draw(screen *ebiten.Image)、Layout(outsideWidth, outsideHeight int)
-这个窗口就被视为Ebat引擎游戏
-**/
-
-func (g *Game) Update() error {
-
-	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		g.player.X += g.player.Speed
-	}
-
-	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		g.player.X -= g.player.Speed
-	}
-
-	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		g.player.Y += g.player.Speed
-	}
-
-	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		g.player.Y -= g.player.Speed
-	}
-
-	if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
-		g.player.Speed = 3
-	} else {
-		g.player.Speed = 2
-	}
-
-	for _, spirte := range *g.enemies {
-		if spirte.FollowPlayer {
-			if spirte.X < g.player.X {
-				spirte.X = spirte.X + spirte.Speed
-			} else {
-				spirte.X = spirte.X - spirte.Speed
-			}
-
-			if spirte.Y < g.player.Y {
-				spirte.Y = spirte.Y + spirte.Speed
-			} else {
-				spirte.Y = spirte.Y - spirte.Speed
+func CheckCollisionHorizontal(sprite *entities.Sprite, colliders []image.Rectangle) {
+	for _, collider := range colliders {
+		if collider.Overlaps(
+			image.Rect(
+				int(sprite.X),
+				int(sprite.Y),
+				int(sprite.X+16),
+				int(sprite.Y+16),
+			),
+		) {
+			if sprite.Dx > 0.0 {
+				sprite.X = float64(collider.Min.X) - 16.0
+			} else if sprite.Dx < 0.0 {
+				sprite.X = float64(collider.Max.X)
 			}
 		}
 	}
+}
 
-	g.cam.FollowTarget(g.player.X+8, g.player.Y+8, 640, 480)
+func CheckCollisionVertical(sprite *entities.Sprite, colliders []image.Rectangle) {
+	for _, collider := range colliders {
+		if collider.Overlaps(
+			image.Rect(
+				int(sprite.X),
+				int(sprite.Y),
+				int(sprite.X+16),
+				int(sprite.Y+16),
+			),
+		) {
+			if sprite.Dy > 0.0 {
+				sprite.Y = float64(collider.Min.Y) - 16.0
+			} else if sprite.Dy < 0.0 {
+				sprite.Y = float64(collider.Max.Y)
+			}
+		}
+	}
+}
+
+func (g *Game) Update() error {
+	// 重置本帧位移量
+	g.player.Dx = 0
+	g.player.Dy = 0
+
+	// 水平移动
+	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		g.player.Dx = -g.player.Speed
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyRight) {
+		g.player.Dx = g.player.Speed
+	}
+	g.player.X += g.player.Dx
+	CheckCollisionHorizontal(g.player.Sprite, g.colliders)
+
+	// 垂直移动
+	if ebiten.IsKeyPressed(ebiten.KeyUp) {
+		g.player.Dy = -g.player.Speed
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyDown) {
+		g.player.Dy = g.player.Speed
+	}
+	g.player.Y += g.player.Dy
+	CheckCollisionVertical(g.player.Sprite, g.colliders)
+
+	// 敌人追踪玩家 + 碰撞检测
+	for _, sprite := range g.enemies {
+		sprite.Dx = 0
+		sprite.Dy = 0
+
+		if sprite.FollowPlayer {
+			if sprite.X < g.player.X {
+				sprite.Dx = sprite.Speed
+			} else if sprite.X > g.player.X {
+				sprite.Dx = -sprite.Speed
+			}
+			if sprite.Y < g.player.Y {
+				sprite.Dy = sprite.Speed
+			} else if sprite.Y > g.player.Y {
+				sprite.Dy = -sprite.Speed
+			}
+		}
+
+		sprite.X += sprite.Dx
+		CheckCollisionHorizontal(sprite.Sprite, g.colliders)
+		sprite.Y += sprite.Dy
+		CheckCollisionVertical(sprite.Sprite, g.colliders)
+	}
+
+	// 药水拾取
+	for _, potion := range g.potions {
+		potionRect := image.Rect(
+			int(potion.X), int(potion.Y),
+			int(potion.X+16), int(potion.Y+16),
+		)
+		playerRect := image.Rect(
+			int(g.player.X), int(g.player.Y),
+			int(g.player.X+16), int(g.player.Y+16),
+		)
+		if playerRect.Overlaps(potionRect) {
+			g.player.HP += int(potion.AmtHeal)
+			fmt.Printf("Picked up potion! Health: %d\n", g.player.HP)
+		}
+	}
+
+	g.cam.FollowTarget(g.player.X+8, g.player.Y+8, 320, 240)
 	g.cam.Constrain(
-		float64(g.tileMapJson.Layer[0].Width)*16.0,
-		float64(g.tileMapJson.Layer[0].Height)*16.0,
-		640,
-		480,
+		float64(g.tilemapJSON.Layer[0].Width)*16.0,
+		float64(g.tilemapJSON.Layer[0].Height)*16.0,
+		320,
+		240,
 	)
 
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	screen.Fill(color.RGBA{120, 180, 255, 255})
 
-	screen.Fill(color.RGBA{120, 180, 255, 255}) //将屏幕设置成浅蓝色
+	opts := ebiten.DrawImageOptions{}
 
-	// ebitenutil.DebugPrint(screen, "Hello, World!") //窗口上添加文字
-
-	//绘制地图
-
-	mapOpts := ebiten.DrawImageOptions{}
-	for _, layer := range g.tileMapJson.Layer {
+	for layerIndex, layer := range g.tilemapJSON.Layer {
 		for index, id := range layer.Data {
-			x := index % layer.Width
-			y := index / layer.Width
+			if id == 0 {
+				continue
+			}
 
-			x *= 16
-			y *= 16
+			x := float64((index % layer.Width) * 16)
+			y := float64((index / layer.Width) * 16)
 
-			srcX := (id - 1) % 22
-			srcY := (id - 1) / 22
+			img := g.tilesets[layerIndex].Img(id)
+			if img == nil {
+				for i := len(g.tilesets) - 1; i >= 0; i-- {
+					img = g.tilesets[i].Img(id)
+					if img != nil {
+						break
+					}
+				}
+			}
+			if img == nil {
+				continue
+			}
 
-			srcX *= 16
-			srcY *= 16
-
-			mapOpts.GeoM.Translate(float64(x)+g.cam.X, float64(y)+g.cam.Y)
-
-			screen.DrawImage(
-				g.tileMapImg.SubImage(image.Rect(srcX, srcY, srcX+16, srcY+16)).(*ebiten.Image),
-				&mapOpts,
-			)
-
-			mapOpts.GeoM.Reset()
+			opts.GeoM.Translate(x, y)
+			opts.GeoM.Translate(0.0, -(float64(img.Bounds().Dy()) - 16))
+			opts.GeoM.Translate(g.cam.X, g.cam.Y)
+			screen.DrawImage(img, &opts)
+			opts.GeoM.Reset()
 		}
 	}
 
-	// 绘制玩家
-	playerOpts := ebiten.DrawImageOptions{}
-	playerOpts.GeoM.Translate(g.player.X+g.cam.X, g.player.Y+g.cam.Y)
+	// 玩家
+	opts.GeoM.Translate(g.player.X, g.player.Y)
+	opts.GeoM.Translate(g.cam.X, g.cam.Y)
 	screen.DrawImage(
-		g.player.Img.SubImage(
-			image.Rect(0, 0, 16, 16),
-		).(*ebiten.Image),
-		&playerOpts,
+		g.player.Img.SubImage(image.Rect(0, 0, 16, 16)).(*ebiten.Image),
+		&opts,
 	)
+	opts.GeoM.Reset()
 
-	// 绘制药水
-	if g.potion != nil {
-		potionOpts := ebiten.DrawImageOptions{}
-		potionOpts.GeoM.Translate(g.potion.X+g.cam.X, g.potion.Y+g.cam.Y)
+	// 敌人
+	for _, sprite := range g.enemies {
+		opts.GeoM.Translate(sprite.X, sprite.Y)
+		opts.GeoM.Translate(g.cam.X, g.cam.Y)
 		screen.DrawImage(
-			g.potion.Img.SubImage(
-				image.Rect(0, 0, 16, 16),
-			).(*ebiten.Image),
-			&potionOpts,
-		)
-	}
-
-	// 绘制其他精灵（静态装饰/NPC 等）
-	for _, sprite := range *g.enemies {
-		opts := ebiten.DrawImageOptions{}
-		opts.GeoM.Translate(sprite.X+g.cam.X, sprite.Y+g.cam.Y)
-		screen.DrawImage(
-			sprite.Img.SubImage(
-				image.Rect(0, 0, 16, 16),
-			).(*ebiten.Image),
+			sprite.Img.SubImage(image.Rect(0, 0, 16, 16)).(*ebiten.Image),
 			&opts,
 		)
+		opts.GeoM.Reset()
+	}
+
+	// 药水
+	for _, sprite := range g.potions {
+		opts.GeoM.Translate(sprite.X, sprite.Y)
+		opts.GeoM.Translate(g.cam.X, g.cam.Y)
+		screen.DrawImage(
+			sprite.Img.SubImage(image.Rect(0, 0, 16, 16)).(*ebiten.Image),
+			&opts,
+		)
+		opts.GeoM.Reset()
 	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return ebiten.WindowSize()
+	return 320, 240
 }
 
-func main() {
-	ebiten.SetWindowSize(640, 480)                                 //设置窗口大小
-	ebiten.SetWindowTitle("Hello, World!")                         //设置窗口标题
-	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled) //设置窗口可自行调节大小
-
+func NewGame() *Game {
 	playerImg, _, err := ebitenutil.NewImageFromFile("assets/images/ninja.png")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	skeletonImg, _, err := ebitenutil.NewImageFromFile("assets/images/skeleton.png")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	potionImg, _, err := ebitenutil.NewImageFromFile("assets/images/potion.png")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	tilemapImg, _, err := ebitenutil.NewImageFromFile("assets/images/TilesetFloor.png")
-
-	tilemapJson, err := NewTileMapJSON("assets/maps/spawn.json")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := ebiten.RunGame(&Game{
+	tilemapJSON, err := NewTileMapJSON("assets/maps/spawn.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tilesets, err := tilemapJSON.GenTilesets()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	colliders := tilemapJSON.GenColliders(tilesets)
+
+	return &Game{
 		player: &entities.Player{
 			Sprite: &entities.Sprite{
 				Img:   playerImg,
-				X:     150,
-				Y:     150,
+				X:     50.0,
+				Y:     50.0,
 				Speed: 2,
 			},
 			HP: 3,
 		},
-		potion: &entities.Potion{
-			Sprite: &entities.Sprite{
-				Img:   potionImg,
-				X:     300,
-				Y:     200,
-				Speed: 0,
-			},
-			AmtHeal: 1,
-		},
-		tileMapJson: tilemapJson,
-		tileMapImg:  tilemapImg,
-		enemies: &[]entities.Enemy{
+		enemies: []*entities.Enemy{
 			{
 				Sprite: &entities.Sprite{
 					Img:   skeletonImg,
-					X:     50,
-					Y:     50,
+					X:     100.0,
+					Y:     100.0,
 					Speed: 1,
 				},
 				FollowPlayer: true,
 			},
-
 			{
 				Sprite: &entities.Sprite{
 					Img:   skeletonImg,
-					X:     100,
-					Y:     100,
-					Speed: 1,
-				},
-				FollowPlayer: true,
-			},
-
-			{
-				Sprite: &entities.Sprite{
-					Img:   skeletonImg,
-					X:     200,
-					Y:     200,
+					X:     150.0,
+					Y:     50.0,
 					Speed: 1,
 				},
 				FollowPlayer: false,
 			},
 		},
-		cam: NewCamera(0, 0),
-	}); err != nil {
+		potions: []*entities.Potion{
+			{
+				Sprite: &entities.Sprite{
+					Img: potionImg,
+					X:   210.0,
+					Y:   100.0,
+				},
+				AmtHeal: 1,
+			},
+		},
+		tilemapJSON: tilemapJSON,
+		tilemapImg:  tilemapImg,
+		tilesets:    tilesets,
+		colliders:   colliders,
+		cam:         NewCamera(0.0, 0.0),
+	}
+}
+
+func main() {
+	ebiten.SetWindowSize(640, 480)
+	ebiten.SetWindowTitle("Hello, World!")
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+
+	game := NewGame()
+
+	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
 }
